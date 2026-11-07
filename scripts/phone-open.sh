@@ -6,4 +6,8 @@ url="${1:-$PAGE_URL}"
 adb shell input keyevent KEYCODE_WAKEUP >/dev/null
 adb shell cmd statusbar collapse >/dev/null 2>&1 || true
 adb shell am start -a android.intent.action.VIEW -d "'$url'" "$CHROME_PKG" >/dev/null
+sleep 2
+# Chrome restores old tabs on launch; every extra app tab would run its own tailscale node + agent. Keep one.
+host=$(echo "$url" | sed -E 's|^https?://([^/]+).*|\1|')
+node scripts/cdp.mjs close-others --url "$host" 2>/dev/null | sed 's/^/  /' || true
 echo "opened $url"

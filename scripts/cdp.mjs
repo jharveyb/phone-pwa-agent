@@ -2,6 +2,7 @@
 // Minimal Chrome DevTools Protocol client for the phone's Chrome (via `adb forward`).
 // Usage:
 //   cdp.mjs targets                 list page/worker targets
+//   cdp.mjs close-others [--url substr]   close all page tabs except the first matching one
 //   cdp.mjs eval  [--url substr] <js-expression>   evaluate in the page (awaits promises)
 //   cdp.mjs logs  [--url substr]    stream console + exceptions until Ctrl-C
 //   cdp.mjs heap  [--url substr] [--type page|worker]   JS heap usage of a realm (Runtime.getHeapUsage)
@@ -19,6 +20,13 @@ execSync("adb forward tcp:9222 localabstract:chrome_devtools_remote", { stdio: "
 const targets = await (await fetch("http://127.0.0.1:9222/json")).json();
 if (cmd === "targets") {
   for (const t of targets) console.log(`${t.type}\t${t.id}\t${t.url}`);
+  process.exit(0);
+}
+if (cmd === "close-others") {
+  // close every page tab except the newest one whose url matches the filter (keeps exactly one app tab)
+  const pages = targets.filter((t) => t.type === "page");
+  const keep = pages.find((t) => t.url.includes(urlFilter));
+  for (const t of pages) if (t !== keep) { await fetch(`http://127.0.0.1:9222/json/close/${t.id}`); console.log(`closed ${t.url}`); }
   process.exit(0);
 }
 const target = targets.find((t) => t.type === typeFilter && t.url.includes(urlFilter));

@@ -1,0 +1,10 @@
+{
+  "name": "phone-agent",
+  "short_name": "phone-agent",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#111111",
+  "theme_color": "#111111",
+  "description": "In-browser Pi agent hosted on a headless phone",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

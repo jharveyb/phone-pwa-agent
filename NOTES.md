@@ -74,3 +74,35 @@ Discrepancies vs the brief (followed upstream's actual API, no forks):
   `rm -rf node_modules/.vite`. `scripts/build-tsweb.sh` does the build (~10 s incremental, go 1.27.3; output 33.9 MB).
 - Go-side `log.Printf` lines show up in the page console as `[log:info]`, so `scripts/phone-logs.sh` gives tailscaled
   logs (control: RegisterReq, authURL, state transitions). Very handy.
+- **RESULT (2026-11-07 13:35): Spike A passes.** Key fix on top of the above: `ipn.Options{AuthKey}` alone does *not*
+  log in on v1.102 — tsnet also calls `backend.StartLoginInteractive(ctx)` afterwards; because the control client was
+  created with the key, that "interactive" login registers with the key and never emits an auth URL. Numbers (Pixel 6,
+  Chrome 153, page served over USB `adb reverse` to avoid the DERP download):
+  - wasm module import 65 ms (cached), `network.init()` with auth key **4.1 s** (fresh state → registered, IPs assigned),
+    `listenTCP(8080)` immediate. Node shows up as `pwa-agent` (OS `js`) in `tailscale status`.
+  - From the laptop: `curl http://pwa-agent.TAILNET.ts.net:8080/` → 200 in **120–160 ms**, path = DERP(nyc)
+    (`tailscale ping`: "direct connection not established" — expected, browser nodes have no UDP; the WebRTC paths
+    the author's private fork adds would fix that).
+  - First download of the 34 MB wasm over the tailnet-served page took ~3.7 min (DERP-relayed phone link ≈150 KB/s);
+    cached by Chrome afterwards. Dev loop: `adb reverse tcp:5173 tcp:5173` + `http://localhost:5173/` (localhost is a
+    secure context, so OPFS/wake lock/SW all work; different origin ⇒ separate IDB/OPFS state from the ts.net origin).
+  - Chrome browser process PSS ≈ 209 MB with the node up; renderer breakdown via `scripts/phone-mem.sh`.
+
+## Steps 5–7 — control API, persistence, keep-alive (done 2026-11-07 13:45)
+- Control API = `src/http.ts` (tiny HTTP/1.1 parser: request line, headers, Content-Length body, one request per
+  connection) inside the tailscale worker; requests are posted to the main thread router (`src/main.ts`), replies go
+  back by id; SSE keeps the TCP connection open and streams agent events (+15 s heartbeats). `scripts/ask.sh` = POST
+  /prompt then follow `/events?since=N` until `agent_end`; `scripts/state.sh` = GET /state.
+  Gotcha: everything crossing `postMessage` must be structured-cloneable (URLSearchParams is not).
+- Latency laptop→phone-tab API: ~130–160 ms per request (DERP nyc). A 4-LLM-call agent run via ask.sh: 3.9 s wall.
+- Persistence (agent worker, OPFS): `fs-snapshot.json` = full InMemoryFs tree (base64 files; ~24 KB with just-bash's
+  default layout of ~176 files) written after every tool call via sync access handle + `move()` (atomic-ish), and
+  every 30 s if dirty; `session.jsonl` = every `message_end` message appended; replay = `initialState.messages`
+  (system messages filtered, dangling `toolUse` assistant tail dropped). Verified with a real force-stop reload: 4
+  messages + files restored, agent read the pre-reload file. `POST /session/clear` drops the transcript only.
+  TODO: no compaction yet — long sessions will blow the 128k context; wire pi-coding-agent's `compact()` or truncate.
+- Keep-alive: wake lock re-acquired on visibilitychange; Web Lock held for the page lifetime; `/manifest.webmanifest`
+  + `/sw.js` (cache-first for main.wasm only); `storage.persist()` => **false** on both origins so far (Chrome grants it
+  for installed PWAs / sites with notification permission — needs the owner's taps). `/state` carries a heartbeat.
+- Dev loop note: on the `http://localhost:5173` (adb reverse) origin HMR is dead (the client dials wss://…:443), so
+  use `scripts/phone-reload.sh http://localhost:5173/` after edits. Each `?reset=ts` registers a NEW tailnet node.
