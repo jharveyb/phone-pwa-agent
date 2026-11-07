@@ -2,6 +2,8 @@
 
 ▶ **[60-second demo video](demo/demo-vo-subs.mp4)** (voiced, subtitled)
 
+<https://github.com/user-attachments/assets/4148cdff-9e70-4e34-b0dd-656f395e64ee>
+
 A [Pi](https://github.com/earendil-works/pi) coding agent that runs **inside a Chrome tab on a headless Pixel 6** and is
 driven entirely from a laptop over Tailscale.
 
