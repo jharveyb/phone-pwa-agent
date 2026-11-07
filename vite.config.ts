@@ -44,6 +44,6 @@ export default defineConfig({
   },
   // tailscale-web locates main.wasm via new URL("main.wasm", import.meta.url); keep it out of dep pre-bundling.
   optimizeDeps: { exclude: ["tailscale-web"] },
-  build: { target: "es2022", rollupOptions: { input: { index: "index.html", probe: "probe.html" } } },
+  build: { target: "es2022" },
   worker: { format: "es" },
 });

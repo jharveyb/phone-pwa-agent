@@ -127,3 +127,24 @@ Discrepancies vs the brief (followed upstream's actual API, no forks):
   `@tinfoilsh/verifier`, 448 KB, + EHBP encrypted request bodies). pi-ai forwards `options.fetch` into the OpenAI SDK
   client, so injecting it is ~20 lines: `await sc.ready(); model.baseUrl = sc.getBaseURL(); streamSimple(..., {fetch: sc.fetch})`.
   Opt-in via `TINFOIL_ATTEST=1`, falls back to plain HTTPS if verification fails; result in `/state .agent.attestation`.
+
+## Demo origin switch (2026-11-07 14:08) + status
+- Opened https://laptop.TAILNET.ts.net/ on the phone: `network.init()` took **147.8 s** on the first run — that is the
+  34 MB wasm coming over the DERP-relayed tailnet link (~230 KB/s), not registration; the SW now has it cached.
+  New node `pwa-agent-1` = 100.x.x.x (the ts.net origin has its own IndexedDB). The USB-origin node `pwa-agent`
+  (100.x.x.x) is now offline and can be deleted in the Tailscale admin, as can any earlier `?reset=ts` leftovers.
+- `scripts/api.sh` resolves the target automatically: newest online tailnet peer with OS `js` named `pwa-agent*`.
+- `storage.persist()` is still false on the ts.net origin → needs "Add to Home screen" (installed PWA) or notification
+  permission; both are owner taps. Note the installed PWA may get its own storage bucket → fresh node + empty OPFS.
+
+### What works end to end (laptop → phone tab)
+ask.sh → POST /prompt → agent (pi Agent + Tinfoil via attested fetch) → bash/read/write/edit/ls on just-bash +
+web_fetch via the tailnet/exit node → OPFS snapshot + session log → SSE back to the laptop. Reload-safe (fs + transcript
+restored), Go-panic-safe (tailscale worker respawn), wake lock + Web Lock held, watchdog on the laptop.
+
+### Open TODOs
+- Context compaction (transcript grows forever; 128k ctx). pi-coding-agent exports `compact()` but drags Node deps.
+- `message_update` streaming deltas are not forwarded over SSE (only whole messages) — fine for ask.sh.
+- Upstream the two tailscale-web patches (authKey option; typed-nil dialer). Go fork drops WebRTC peer paths → DERP only.
+- Worker heap numbers: `cdp.mjs heap --type worker` needs the worker to be listed under /json (it is, intermittently).
+- Relay fallback was never needed; not written.

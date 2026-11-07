@@ -47,6 +47,7 @@ TS_HOSTNAME=pwa-agent          # tailnet name of the browser node
 TS_EXIT_NODE=my-exit-node     # optional: tailnet exit node used by web_fetch for the public internet
 TINFOIL_API_KEY=tk_...
 TINFOIL_MODEL=deepseek-v4-1-flash
+TINFOIL_ATTEST=1               # optional: Tinfoil SDK enclave attestation + encrypted request bodies
 ```
 Secrets reach the phone through a tailnet-only `/__config.json` endpoint served by the dev server; nothing is typed on the phone.
 
@@ -57,7 +58,7 @@ scripts/phone-logs.sh                 # stream the page + worker consoles (tails
 scripts/state.sh                      # GET /state from the phone's tailnet IP
 scripts/ask.sh "list the home dir"    # POST /prompt + follow the SSE event stream
 scripts/watchdog.sh 30                # alert (notify-send / NTFY_TOPIC) when the heartbeat stops
-scripts/phone-reload.sh               # force-stop Chrome and reopen (real reload, tests persistence)
+scripts/phone-reload.sh [--purge]     # force-stop Chrome and reopen (real reload, tests persistence); --purge drops the SW wasm cache
 scripts/phone-mem.sh                  # Chrome PSS on the phone
 ```
 Control API (plain HTTP on `http://<node>:8080`, tailnet only):
@@ -70,6 +71,7 @@ Control API (plain HTTP on `http://<node>:8080`, tailnet only):
 | POST | `/abort` | abort the current run |
 | POST | `/restart` | terminate + respawn the agent worker (state restored from OPFS) |
 | POST | `/session/clear` | drop the transcript (keeps files) |
+| POST | `/fetch` | `{"url": "..."}` debug: fetch through the tailscale node without the LLM |
 | GET | `/events?since=N` | SSE: replay events after N, then live |
 | GET | `/log` | page log |
 
