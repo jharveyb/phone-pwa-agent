@@ -1,6 +1,6 @@
-# phone-agent
+# phone-pwa-agent
 
-▶ **[60-second demo video](demo/demo-vo-subs.mp4)** (voiced, subtitled)
+▶ **60-second demo video** (voiced, subtitled)
 
 <https://github.com/user-attachments/assets/4148cdff-9e70-4e34-b0dd-656f395e64ee>
 
@@ -23,51 +23,46 @@ Status, measurements and dead ends: [NOTES.md](NOTES.md).
 ## Architecture
 
 ```mermaid
-flowchart LR
-  subgraph laptop["Laptop / any device on the tailnet"]
-    cli["ask.sh · state.sh · watchdog.sh<br/>(curl + SSE)"]
-    ui["Browser → GET /ui<br/>chat page served by the phone"]
+flowchart TB
+  subgraph ctl["Laptop · any device on the tailnet"]
+    cli["ask.sh / state.sh / curl"]
+    ui["Browser → /ui chat page"]
   end
 
   subgraph phone["Phone · Chrome · installed PWA (one tab)"]
-    direction TB
     router["Main thread: router<br/>wake lock · single-instance lock"]
-    subgraph tsw["Worker: tailscale-web (Go → WASM)"]
-      tsnode["Tailscale node<br/>auth-key login · WireGuard · netstack"]
-      http["HTTP/1.1 + SSE server on :8080"]
-      wf["net.fetch (web_fetch egress)"]
+    subgraph tsw["Worker: tailscale-web (Go→WASM)"]
+      http["HTTP + SSE server :8080"]
+      tsnode["Tailscale node<br/>auth key · WireGuard · netstack"]
     end
     subgraph agw["Worker: agent"]
-      pi["pi Agent loop<br/>(@earendil-works/pi-agent-core)"]
-      tools["Tools: read · write · edit · bash · ls<br/>web_fetch · python"]
-      benv["BrowserExecutionEnv<br/>just-bash + InMemoryFs"]
+      pi["pi Agent loop"]
+      tools["tools: read · write · edit<br/>bash · ls · web_fetch · python"]
+      benv["just-bash + InMemoryFs"]
     end
-    py["Worker: python<br/>Pyodide (CPython/WASM) sandbox"]
-    subgraph storage["Origin storage"]
-      opfs[("OPFS<br/>fs snapshot · session.jsonl")]
-      idb[("IndexedDB<br/>Tailscale node state")]
-    end
+    py["Worker: Pyodide<br/>CPython sandbox"]
+    wf["net.fetch egress<br/>(in the tailscale-web worker)"]
+    opfs[("OPFS: fs snapshot<br/>+ session.jsonl")]
+    idb[("IndexedDB:<br/>node state")]
   end
 
   subgraph net["Tailnet / internet"]
     ctrl["Tailscale control + DERP"]
-    exitnode["Tailnet exit node"]
-    inet["Public internet"]
-    tinfoil["Tinfoil inference enclave<br/>(attested, encrypted bodies)"]
+    exitnode["Exit node → internet"]
+    tinfoil["Tinfoil enclave<br/>(attested LLM)"]
   end
 
-  cli -- "HTTP over the tailnet" --> http
-  ui -- "HTTP + SSE" --> http
-  http <-- "postMessage" --> router
-  router <-- "postMessage" --> pi
-  pi --> tools --> benv
-  tools -- "web_fetch" --> router --> wf
-  tools -- "run code, files in/out" --> py
-  benv -- "snapshot after each tool call" --> opfs
+  cli & ui -- "HTTP over tailnet" --> http
+  http <--> router <--> pi
+  pi --> tools --> benv --> opfs
+  tools -- "run code" --> py
+  tools -- "web_fetch" --> wf --> exitnode
   tsnode --> idb
-  tsnode <-- "WebSocket" --> ctrl
-  wf --> exitnode --> inet
-  pi -- "HTTPS via Tinfoil SecureClient fetch" --> tinfoil
+  tsnode <--> ctrl
+  pi -- "attested HTTPS" --> tinfoil
+  %% invisible links: keep the bottom group centred under the phone
+  opfs ~~~ tinfoil
+  py ~~~ tinfoil
 ```
 
 ## Layout
