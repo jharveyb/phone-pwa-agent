@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.direnv/
+result
+.env
+config.local.json
+*.local
+.pnpm-store/
+.vite/
