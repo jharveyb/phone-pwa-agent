@@ -1,0 +1,9 @@
+phone-agent
+
+a Pi coding agent that lives in a
+browser tab on an Android phone
+
+• agent loop + bash + files + Python in the tab
+• the tab is its own Tailscale node
+• controlled from any device on the tailnet
+• LLM: DeepSeek on Tinfoil, attested in-browser

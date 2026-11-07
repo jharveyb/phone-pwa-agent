@@ -10,3 +10,5 @@ config.local.json
 vendor/tailscale-web/dist/main.wasm
 vendor/tailscale-web/src/wasm/main.wasm
 .playwright-mcp/
+screencaps/
+demo/*.mp4
