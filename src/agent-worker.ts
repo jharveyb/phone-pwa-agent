@@ -13,7 +13,7 @@ const SESSION_LOG = "session.jsonl";
 const SNAPSHOT_INTERVAL_MS = 30_000;
 
 export type AgentWorkerIn =
-  | { type: "init"; tinfoilApiKey: string; model: string; baseUrl?: string }
+  | { type: "init"; tinfoilApiKey: string; model: string; baseUrl?: string; attest?: boolean }
   | { type: "prompt"; text: string }
   | { type: "steer"; text: string }
   | { type: "abort" }
@@ -36,6 +36,7 @@ export interface AgentPublicState {
   lastAssistantText?: string;
   turns: number;
   persistence: { restoredMessages: number; restoredFiles: number; lastSnapshotAt?: number; snapshotBytes?: number; sessionBytes?: number; dirty: boolean };
+  attestation: { enabled: boolean; verified: boolean; enclave?: string; error?: string; ms?: number };
 }
 
 const post = (m: AgentWorkerOut) => self.postMessage(m);
@@ -94,6 +95,7 @@ function publicState(): AgentPublicState {
     lastAssistantText,
     turns,
     persistence,
+    attestation,
   };
 }
 
@@ -112,8 +114,29 @@ function tinfoilModel(id: string, baseUrl: string): Model<"openai-completions"> 
   };
 }
 
+let attestedFetch: typeof fetch | undefined;
+let attestation: { enabled: boolean; verified: boolean; enclave?: string; error?: string; ms?: number } = { enabled: false, verified: false };
+
 async function init(m: Extract<AgentWorkerIn, { type: "init" }>) {
-  const baseUrl = m.baseUrl ?? "https://inference.tinfoil.sh/v1";
+  let baseUrl = m.baseUrl ?? "https://inference.tinfoil.sh/v1";
+  if (m.attest) {
+    // Phase 2: Tinfoil SDK SecureClient = in-browser enclave attestation + end-to-end encrypted request bodies (EHBP).
+    // Its verified fetch is injected into pi-ai via the `fetch` request option; the model's baseUrl becomes the enclave.
+    attestation.enabled = true;
+    const t0 = performance.now();
+    try {
+      const { SecureClient } = await import("tinfoil");
+      const sc = new SecureClient({});
+      await sc.ready();
+      baseUrl = sc.getBaseURL()!;
+      attestedFetch = sc.fetch;
+      attestation = { enabled: true, verified: true, enclave: sc.getEnclaveURL(), ms: Math.round(performance.now() - t0) };
+      log(`tinfoil attestation verified in ${attestation.ms}ms; enclave=${attestation.enclave} baseUrl=${baseUrl}`);
+    } catch (e) {
+      attestation = { enabled: true, verified: false, error: String(e), ms: Math.round(performance.now() - t0) };
+      log(`tinfoil attestation FAILED (falling back to plain HTTPS): ${e}`);
+    }
+  }
   const model = tinfoilModel(m.model, baseUrl);
   const models = createModels();
   models.setProvider(
@@ -137,7 +160,7 @@ async function init(m: Extract<AgentWorkerIn, { type: "init" }>) {
   if (restored.length) log(`restored ${restored.length} transcript messages`);
   const tools = [...createBrowserTools(env), createWebFetchTool((req) => post({ type: "fetch", ...req }))];
   agent = new Agent({
-    streamFn: (mdl, ctx, opts) => models.streamSimple(mdl, ctx, opts),
+    streamFn: (mdl, ctx, opts) => models.streamSimple(mdl, ctx, attestedFetch ? { ...opts, fetch: attestedFetch } : opts),
     initialState: { systemPrompt: SYSTEM_PROMPT, tools, model, thinkingLevel: "off", messages: restored },
     toolExecution: "sequential",
   });

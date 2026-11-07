@@ -4,6 +4,7 @@ export interface AppConfig {
   tinfoilApiKey: string | null;
   tinfoilModel: string | null;
   tsExitNode: string | null;
+  tinfoilAttest: boolean;
 }
 export async function loadConfig(): Promise<AppConfig> {
   const r = await fetch("/__config.json", { cache: "no-store" });

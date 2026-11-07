@@ -40,7 +40,7 @@ class AgentHost {
       else if (m.type === "fetch") this.onFetch?.(m);
     };
     this.worker.onerror = (e) => line(`agent worker error: ${e.message}`);
-    if (this.cfg.tinfoilApiKey && this.cfg.tinfoilModel) this.send({ type: "init", tinfoilApiKey: this.cfg.tinfoilApiKey, model: this.cfg.tinfoilModel });
+    if (this.cfg.tinfoilApiKey && this.cfg.tinfoilModel) this.send({ type: "init", tinfoilApiKey: this.cfg.tinfoilApiKey, model: this.cfg.tinfoilModel, attest: this.cfg.tinfoilAttest });
     else line("agent: no TINFOIL_API_KEY/TINFOIL_MODEL in config, agent idle");
   }
   private emit(event: any) {

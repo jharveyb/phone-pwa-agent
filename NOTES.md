@@ -106,3 +106,24 @@ Discrepancies vs the brief (followed upstream's actual API, no forks):
   for installed PWAs / sites with notification permission — needs the owner's taps). `/state` carries a heartbeat.
 - Dev loop note: on the `http://localhost:5173` (adb reverse) origin HMR is dead (the client dials wss://…:443), so
   use `scripts/phone-reload.sh http://localhost:5173/` after edits. Each `?reset=ts` registers a NEW tailnet node.
+
+## Step 8 — web_fetch through the tailnet + Tinfoil attestation (2026-11-07 14:05)
+- `web_fetch` = agent worker → main → tailscale worker `network.fetch(url)` (tailscale-web's Go HTTP client over
+  netstack) → back. Exit node from `TS_EXIT_NODE` (set once via `listExitNodes()/setExitNode()`); tailnet hosts work
+  without one, public internet needs one. Bodies are labelled UNTRUSTED and HTML is reduced to text (50 KB cap).
+  Public fetch via exit node `my-exit-node`: api.github.com 587 ms.
+- **Crash found & fixed in the fork:** fetching a dual-stack name (example.com) panicked the Go program:
+  `gonet.(*TCPConn).Close(nil)` from `netx.RaceDial` (racedial.go:70). Cause: tailscale-web's
+  `dialer.NetstackDialTCP` wrapper returned `stack.DialContextTCP(...)` (`*gonet.TCPConn, error`) as `(net.Conn, error)`
+  → typed-nil interface on error → RaceDial's `if c != nil { c.Close() }` dereferences nil. Patched the wrapper
+  (and the UDP one) to return a real nil. Worth upstreaming to adrianosela/tailscale-web.
+- A Go panic ends the wasm program ("Go program has already exited") = node, listener and the control API are gone,
+  but the page lives on. `main.ts` now watches the worker's `onerror` and respawns the tailscale worker with backoff;
+  measured: crash → listening again in ~4 s (state restored from IndexedDB, same IP). `POST /fetch {url}` is a
+  debug endpoint to exercise the node without spending LLM tokens.
+- Service-worker gotcha: cache-first on `main.wasm` pinned the OLD binary after a rebuild. Now stale-while-revalidate;
+  `scripts/phone-reload.sh --purge` clears the SW caches via CDP before reloading.
+- Tinfoil phase 2: the `tinfoil` npm SDK's `SecureClient` exposes a verified `fetch` (enclave attestation through
+  `@tinfoilsh/verifier`, 448 KB, + EHBP encrypted request bodies). pi-ai forwards `options.fetch` into the OpenAI SDK
+  client, so injecting it is ~20 lines: `await sc.ready(); model.baseUrl = sc.getBaseURL(); streamSimple(..., {fetch: sc.fetch})`.
+  Opt-in via `TINFOIL_ATTEST=1`, falls back to plain HTTPS if verification fails; result in `/state .agent.attestation`.

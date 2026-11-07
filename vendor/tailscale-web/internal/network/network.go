@@ -262,11 +262,22 @@ func newNetstack(logf logger.Logf, sys *tsd.System, eng wgengine.Engine, dialer 
 	stack.ProcessSubnets = true
 
 	dialer.UseNetstackForIP = func(ip netip.Addr) bool { return true }
+	// [phone-agent patch] never return a typed-nil *gonet.TCPConn inside a net.Conn: netx.RaceDial (used when a
+	// name resolves to v4+v6, e.g. example.com via an exit node) does `if c != nil { c.Close() }` and panics on it,
+	// which kills the whole Go program.
 	dialer.NetstackDialTCP = func(ctx context.Context, dst netip.AddrPort) (net.Conn, error) {
-		return stack.DialContextTCP(ctx, dst)
+		c, err := stack.DialContextTCP(ctx, dst)
+		if err != nil || c == nil {
+			return nil, err
+		}
+		return c, nil
 	}
 	dialer.NetstackDialUDP = func(ctx context.Context, dst netip.AddrPort) (net.Conn, error) {
-		return stack.DialContextUDP(ctx, dst)
+		c, err := stack.DialContextUDP(ctx, dst)
+		if err != nil || c == nil {
+			return nil, err
+		}
+		return c, nil
 	}
 	sys.NetstackRouter.Set(true)
 	sys.Tun.Get().Start()
