@@ -28,6 +28,6 @@ ffmpeg -hide_banner -loglevel error -y \
         fade=t=in:st=0:d=0.5,fade=t=out:st=59.3:d=0.7,format=yuv420p[out]" \
   -map "[out]" -t 60 -r 30 -c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p -movflags +faststart demo.mp4
 # burned-in subtitles variant
-ffmpeg -hide_banner -loglevel error -y -i demo.mp4 -vf "subtitles=demo.srt:force_style='FontName=DejaVu Sans,FontSize=18,PrimaryColour=&H00FFFFFF,OutlineColour=&H80000000,Outline=2,MarginV=30'" \
+ffmpeg -hide_banner -loglevel error -y -i demo.mp4 -vf "subtitles=demo.srt:force_style='FontName=DejaVu Sans,FontSize=11,PrimaryColour=&H00FFFFFF,OutlineColour=&HA0000000,Outline=1,MarginV=8'" \
   -c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p -movflags +faststart demo-subs.mp4
 ls -la demo.mp4 demo-subs.mp4
