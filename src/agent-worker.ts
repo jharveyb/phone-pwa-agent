@@ -6,6 +6,7 @@ import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completio
 import { BrowserExecutionEnv, type FsSnapshot } from "./env/browser-env";
 import { opfsAppendText, opfsReadText, opfsRemove, opfsStat, opfsWriteText } from "./opfs";
 import { createBrowserTools } from "./tools";
+import { createPythonTool } from "./tools/python";
 import { createWebFetchTool, resolveFetch } from "./tools/web-fetch";
 
 const FS_SNAPSHOT = "fs-snapshot.json";
@@ -45,6 +46,7 @@ const log = (s: string) => post({ type: "log", text: `[agent] ${s}` });
 const SYSTEM_PROMPT = `You are a coding agent running inside a browser tab on an Android phone. Your tools operate on an in-memory
 Unix-like filesystem (home: /home/agent) with an in-browser bash interpreter: coreutils, grep/sed/awk, jq, find, etc.
 There are no external binaries, no package managers and no network from bash. Files persist across reloads via snapshots.
+Use the python tool for real computation (CPython in a sandbox, same home directory); use web_fetch for the web.
 Be concise. Prefer tools over guessing. When the task is done, reply with a short summary.`;
 
 let agent: Agent | undefined;
@@ -158,7 +160,7 @@ async function init(m: Extract<AgentWorkerIn, { type: "init" }>) {
   const restored = await loadSession().catch((e) => { log(`session restore FAILED: ${e}`); return [] as AgentMessage[]; });
   persistence.restoredMessages = restored.length;
   if (restored.length) log(`restored ${restored.length} transcript messages`);
-  const tools = [...createBrowserTools(env), createWebFetchTool((req) => post({ type: "fetch", ...req }))];
+  const tools = [...createBrowserTools(env), createWebFetchTool((req) => post({ type: "fetch", ...req })), createPythonTool(env, log)];
   agent = new Agent({
     streamFn: (mdl, ctx, opts) => models.streamSimple(mdl, ctx, attestedFetch ? { ...opts, fetch: attestedFetch } : opts),
     initialState: { systemPrompt: SYSTEM_PROMPT, tools, model, thinkingLevel: "off", messages: restored },

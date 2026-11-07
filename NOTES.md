@@ -154,3 +154,13 @@ restored), Go-panic-safe (tailscale worker respawn), wake lock + Web Lock held, 
   reload doesn't refuse itself); a duplicate shows a red "another instance is running" page and starts nothing.
 - Redaction: history rewritten with `git filter-branch` (tailnet name, hostnames, 100.x IPs, exit node, device serial
   → placeholders); `scripts/api.sh` derives the MagicDNS suffix at runtime.
+
+## Demo-day additions (2026-11-07 15:50)
+- `GET /ui`: a chat page served by the tab itself (src/ui.ts): same-origin fetch + EventSource, shows tool calls,
+  works from any browser on the tailnet (plain HTTP, so no mixed-content issue). `scripts/demo.sh` = demo script.
+- `python` tool: Pyodide 0.27.7 (CPython/WASM) in a worker nested under the agent worker, loaded from jsDelivr
+  (10 MB wasm + 2.3 MB stdlib, cached by the SW). First load on the phone: **7.7 s** (its own internet, not DERP);
+  the agent's home dir is mirrored in/out around each run. just-bash's own `python: true` is Node-only.
+- Installed PWA windows don't always take the HMR reload → `scripts/phone-reload.sh --soft` (location.reload via CDP).
+- Transcript anchoring: after adding a tool, a restored transcript where the model had concluded "no python" made it
+  keep saying so; `POST /session/clear` fixed it. Compaction/summary would help here too.

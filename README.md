@@ -6,7 +6,8 @@ driven entirely from a laptop over Tailscale.
 - **Agent**: `@earendil-works/pi-agent-core` `Agent` + `@earendil-works/pi-ai` (OpenAI-compatible provider pointed at
   [Tinfoil](https://tinfoil.sh)). Runs in a dedicated Web Worker.
 - **Tools**: `read`/`write`/`edit`/`bash`/`ls` (pi's schemas) on a `BrowserExecutionEnv` = [just-bash](https://github.com/vercel-labs/just-bash)
-  (TypeScript bash interpreter) + in-memory filesystem, plus `web_fetch` that egresses through the tailnet.
+  (TypeScript bash interpreter) + in-memory filesystem, `web_fetch` that egresses through the tailnet, and `python`
+  (CPython via Pyodide in a sandboxed worker, sharing the agent's files).
 - **Network**: the tab is its own tailnet node via [tailscale-web](https://github.com/adrianosela/tailscale-web)
   (WASM tailscaled in a second worker, auth-key login, `listenTCP`) and serves a tiny HTTP/SSE control API **directly
   on its tailnet IP**. No relay server.
@@ -57,14 +58,16 @@ scripts/phone-open.sh                 # open https://<laptop>.<tailnet>.ts.net/ 
 scripts/phone-logs.sh                 # stream the page + worker consoles (tailscaled logs included)
 scripts/state.sh                      # GET /state from the phone's tailnet IP
 scripts/ask.sh "list the home dir"    # POST /prompt + follow the SSE event stream
+scripts/demo.sh                       # end-to-end demo (web_fetch + python + persistence)
 scripts/watchdog.sh 30                # alert (notify-send / NTFY_TOPIC) when the heartbeat stops
-scripts/phone-reload.sh [--purge]     # force-stop Chrome and reopen (real reload, tests persistence); --purge drops the SW wasm cache
+scripts/phone-reload.sh [--soft|--purge]  # --soft: reload in place (keeps the PWA window); default force-stops Chrome; --purge drops the SW cache
 scripts/phone-mem.sh                  # Chrome PSS on the phone
 ```
 Control API (plain HTTP on `http://<node>:8080`, tailnet only):
 
 | Method | Path | |
 |---|---|---|
+| GET | `/ui` | chat UI (open it in any browser on the tailnet) |
 | GET | `/state` | heartbeat, visibility, wake lock, tailscale node, agent state, persistence |
 | POST | `/prompt` | `{"text": "..."}` → 202; queued as follow-up if the agent is busy |
 | POST | `/steer` | inject a message mid-run |

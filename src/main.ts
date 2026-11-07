@@ -3,6 +3,7 @@ import type { AgentPublicState, AgentWorkerIn, AgentWorkerOut } from "./agent-wo
 import { loadConfig, type AppConfig } from "./config";
 import type { MainToTs, TsToMain } from "./control-protocol";
 import type { HttpRequest } from "./http";
+import { UI_HTML } from "./ui";
 
 const BOOT = Date.now();
 const statusEl = document.getElementById("status")!;
@@ -80,7 +81,8 @@ function fullState(ctx: Ctx) {
 
 async function route(req: HttpRequest, ctx: Ctx): Promise<Reply> {
   const jsonBody = () => { try { return req.body ? JSON.parse(req.body) : {}; } catch { throw new Error("body is not JSON"); } };
-  if (req.method === "GET" && req.path === "/") return { status: 200, body: `phone-agent ${ctx.ts.ip4} up ${Math.round((Date.now() - BOOT) / 1000)}s agent=${ctx.agent.ready ? "ready" : "init"} streaming=${ctx.agent.state?.isStreaming ?? "?"}\nendpoints: GET /state, POST /prompt {text}, POST /steer {text}, POST /abort, POST /restart, POST /session/clear, POST /fetch {url} (debug), GET /events[?since=N], GET /log\n` };
+  if (req.method === "GET" && req.path === "/") return { status: 200, body: `phone-agent ${ctx.ts.ip4} up ${Math.round((Date.now() - BOOT) / 1000)}s agent=${ctx.agent.ready ? "ready" : "init"} streaming=${ctx.agent.state?.isStreaming ?? "?"}\nendpoints: GET /ui (chat), GET /state, POST /prompt {text}, POST /steer {text}, POST /abort, POST /restart, POST /session/clear, POST /fetch {url} (debug), GET /events[?since=N], GET /log\n` };
+  if (req.method === "GET" && (req.path === "/ui" || req.path === "/ui/")) return { status: 200, body: UI_HTML, headers: { "content-type": "text/html; charset=utf-8" } };
   if (req.method === "GET" && req.path === "/state") return { status: 200, body: JSON.stringify(fullState(ctx), null, 1) + "\n", headers: { "content-type": "application/json" } };
   if (req.method === "GET" && req.path === "/log") return { status: 200, body: logLines.join("\n") + "\n" };
   if (req.method === "POST" && (req.path === "/prompt" || req.path === "/steer")) {
