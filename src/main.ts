@@ -72,7 +72,7 @@ function fullState(ctx: Ctx) {
     wakeLock: wakeLockHeld,
     webLock: webLockHeld,
     online: navigator.onLine,
-    ts: ctx.ts,
+    ts: { ip4: ctx.ts.ip4, ip6: ctx.ts.ip6, initMs: ctx.ts.initMs, listening: ctx.ts.listening, errors: ctx.ts.errors, restarts: ctx.ts.restarts, authUrl: ctx.ts.authUrl }, // no functions: must be cloneable
     agent: { ready: ctx.agent.ready, restarts: ctx.agent.restarts, eventSeq: ctx.agent.seq, ...(ctx.agent.state ?? {}) },
     memory: (performance as any).memory ? { usedJSHeapMB: +((performance as any).memory.usedJSHeapSize / 1048576).toFixed(1) } : undefined,
   };
