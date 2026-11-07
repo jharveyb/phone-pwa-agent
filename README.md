@@ -62,6 +62,7 @@ scripts/demo.sh                       # end-to-end demo (web_fetch + python + pe
 scripts/watchdog.sh 30                # alert (notify-send / NTFY_TOPIC) when the heartbeat stops
 scripts/phone-reload.sh [--soft|--purge]  # --soft: reload in place (keeps the PWA window); default force-stops Chrome; --purge drops the SW cache
 scripts/phone-mem.sh                  # Chrome PSS on the phone
+scripts/phone-pwa.sh restart          # kill + relaunch the installed PWA from the launcher (hard persistence test)
 ```
 Control API (plain HTTP on `http://<node>:8080`, tailnet only):
 

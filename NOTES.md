@@ -164,3 +164,7 @@ restored), Go-panic-safe (tailscale worker respawn), wake lock + Web Lock held, 
 - Installed PWA windows don't always take the HMR reload → `scripts/phone-reload.sh --soft` (location.reload via CDP).
 - Transcript anchoring: after adding a tool, a restored transcript where the model had concluded "no python" made it
   keep saying so; `POST /session/clear` fixed it. Compaction/summary would help here too.
+- Hard persistence test (`scripts/phone-pwa.sh restart` = force-stop Chrome + the WebAPK, relaunch from the launcher):
+  back on the tailnet in 15 s with 49 transcript messages + 178 files restored, wake lock/web lock held, PWA activity
+  in the foreground. The WebAPK package is auto-detected (its apk contains "phone-agent"). session.jsonl is 234 KB
+  after ~50 messages — compaction is the next real need.
