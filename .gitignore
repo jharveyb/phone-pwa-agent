@@ -12,3 +12,6 @@ vendor/tailscale-web/src/wasm/main.wasm
 .playwright-mcp/
 screencaps/
 demo/*.mp4
+demo/voice/
+demo/vo/
+demo/*.wav

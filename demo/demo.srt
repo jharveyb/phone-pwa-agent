@@ -1,40 +1,39 @@
 1
 00:00:00,000 --> 00:00:04,000
-Your phone is already an always-on computer. Why rent a server to run an agent?
+Your phone is an always-on computer. Why rent a server?
 
 2
 00:00:04,000 --> 00:00:09,000
-phone-agent runs a Pi coding agent entirely inside a Chrome tab on an Android phone:
-agent loop, bash, filesystem, Python. Nothing installed on the phone.
+phone-agent runs a Pi agent inside a Chrome tab on a phone.
 
 3
 00:00:09,000 --> 00:00:12,500
-Launching from scratch: joins the tailnet, restores files + transcript, attests the Tinfoil enclave. ~2 s.
+Launched from scratch: on the tailnet in two seconds.
 
 4
 00:00:12,500 --> 00:00:18,000
-The tab is a real Tailscale node. The chat page on the left is served by the phone to the laptop. No relay.
+The tab is a real Tailscale node, serving this chat page to my laptop.
 
 5
 00:00:18,000 --> 00:00:26,000
-"What did we do earlier?" It remembers: the transcript lives in browser storage and survives restarts.
+I ask what we did earlier. It remembers: the transcript lives in browser storage and survives restarts.
 
 6
 00:00:26,000 --> 00:00:34,000
-Replies come from DeepSeek on Tinfoil through an attested, encrypted channel verified by the phone.
+Every reply comes from DeepSeek on Tinfoil, over an attested, encrypted channel the phone verified itself.
 
 7
 00:00:34,000 --> 00:00:40,000
-"Show your golfed Fibonacci code and run it again."
+Now: show your golfed Fibonacci code, and run it again.
 
 8
 00:00:40,000 --> 00:00:47,000
-The python tool: CPython in WebAssembly, in a sandboxed worker, sharing the agent's files. Loaded in 2 s.
+The python tool is CPython in WebAssembly, sandboxed in a worker, sharing the agent's files.
 
 9
 00:00:47,000 --> 00:00:52,000
-Output streams back over server-sent events. The phone did all of it.
+Output streams back to the laptop. The phone did all of it.
 
 10
 00:00:52,000 --> 00:01:00,000
-Pi + Tailscale + Pyodide, in one tab, on a phone, controlled from anywhere on the tailnet. phone-agent.
+Pi, Tailscale and Pyodide in one tab, on a phone, controlled from anywhere on the tailnet. phone-agent.
