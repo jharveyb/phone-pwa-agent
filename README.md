@@ -16,6 +16,65 @@ driven entirely from a laptop over Tailscale.
 
 Status, measurements and dead ends: [NOTES.md](NOTES.md).
 
+## Architecture
+
+```mermaid
+flowchart LR
+  subgraph laptop["Laptop (any tailnet machine)"]
+    cli["scripts/ask.sh · state.sh · watchdog.sh<br/>curl / jq"]
+    ui["Browser → GET /ui<br/>(chat page served by the phone)"]
+    dev["Vite dev server + tailscale serve<br/>https://laptop.ts.net (page + /__config.json)"]
+  end
+
+  subgraph phone["Pixel 6 · Chrome · installed PWA (one tab)"]
+    direction TB
+    subgraph mainthread["Main thread"]
+      router["Router + status page<br/>wake lock · Web Lock (single instance)<br/>service worker (wasm/Pyodide cache)"]
+    end
+    subgraph tsw["Worker: tailscale-web (Go → WASM)"]
+      tsnode["Tailscale node 'pwa-agent'<br/>auth-key login · netstack · WireGuard"]
+      http["HTTP/1.1 + SSE server on :8080<br/>/prompt /events /state /ui …"]
+      wf["net.fetch (web_fetch egress)"]
+    end
+    subgraph agw["Worker: agent"]
+      pi["pi Agent loop<br/>(@earendil-works/pi-agent-core)"]
+      tools["Tools: read · write · edit · bash · ls<br/>web_fetch · python"]
+      benv["BrowserExecutionEnv<br/>just-bash interpreter + InMemoryFs"]
+      pers["Persistence<br/>fs snapshot + session.jsonl"]
+    end
+    subgraph pyw["Worker: python (nested)"]
+      py["Pyodide · CPython/WASM sandbox<br/>home dir mirrored in/out"]
+    end
+    subgraph storage["Origin storage"]
+      opfs[("OPFS<br/>fs-snapshot.json · session.jsonl")]
+      idb[("IndexedDB<br/>Tailscale node state")]
+    end
+  end
+
+  subgraph net["Tailnet / internet"]
+    ctrl["Tailscale control + DERP relays"]
+    exitnode["Exit node (TS_EXIT_NODE)"]
+    inet["Public internet"]
+    tinfoil["Tinfoil inference enclave<br/>deepseek-v4-1-flash<br/>(attested, encrypted bodies)"]
+    cdn["jsDelivr CDN<br/>Pyodide runtime"]
+  end
+
+  cli -- "HTTP over the tailnet" --> http
+  ui -- "HTTP + SSE" --> http
+  dev -. "page load / HMR" .-> router
+  http <-- "postMessage" --> router
+  router <-- "postMessage" --> pi
+  pi --> tools --> benv
+  tools -- "fetch request" --> router -- "fetch" --> wf
+  tools -- "run code" --> py
+  benv <-- "snapshot / restore" --> pers --> opfs
+  tsnode --> idb
+  tsnode <-- "WebSocket to DERP" --> ctrl
+  wf -- "via exit node" --> exitnode --> inet
+  pi -- "HTTPS: pi-ai openai-completions + Tinfoil SecureClient fetch" --> tinfoil
+  py -. "first load, then SW-cached" .-> cdn
+```
+
 ## Layout
 ```
 src/main.ts            status page + router: tailscale worker <-> agent worker, SSE, keep-alive
