@@ -57,3 +57,20 @@ Discrepancies vs the brief (followed upstream's actual API, no forks):
   `bash.exec("echo $((6*7)); cat hello.txt | tr a-z A-Z; ls -la")` works. `uname` is not a command (expected).
 - Dedicated workers don't appear in `/json` of the DevTools socket; heap numbers via `cdp.mjs heap` are main-realm only.
   TODO: Target.setAutoAttach for worker heaps if we need them.
+
+## Spike A — tailscale-web on the phone (in progress)
+- `tailscale-web@0.1.18` has **no auth-key support**: `main.go initFn` reads only hostname/storage/storagePrefix/
+  controlUrl/onAuthRequired/onAuthComplete, then `backend.Start(ipn.Options{UpdatePrefs})` → interactive login URL
+  within ~3 s on the phone (wasm instantiate + control handshake). Verified against the repo source, not just typings.
+- Fix = ~10 lines in `vendor/tailscale-web` (Apache-2.0 fork, `pnpm add tailscale-web@link:vendor/tailscale-web`):
+  `Config.AuthKey`, `opts.Get("authKey")`, `backend.Start(ipn.Options{UpdatePrefs, AuthKey})` — exactly what tsnet
+  does — and skip `StartLoginInteractive` when a key is given. TODO: upstream as a PR.
+- Rebuilding the wasm had three traps: (1) go.mod `replace tailscale.com => ../../tailscale/tailscale` points at the
+  author's *private* fork; the only thing it adds is `_ "tailscale.com/feature/webrtc"` (WebRTC peer paths for
+  browsers), which isn't in the public `adrianosela/tailscale` fork either → dropped the import, build against upstream
+  tailscale v1.102.3 = DERP-only like upstream tsconnect. (2) Go 1.27 + `GOOS=js` fails in `os/user` unless
+  `CGO_ENABLED=0` (nix sets CC, so cgo looks enabled for the cross-compile). (3) Vite's module graph kept serving the
+  old `/node_modules/.pnpm/...` path for the *worker* URL after the dependency became a symlink — restart Vite and
+  `rm -rf node_modules/.vite`. `scripts/build-tsweb.sh` does the build (~10 s incremental, go 1.27.3; output 33.9 MB).
+- Go-side `log.Printf` lines show up in the page console as `[log:info]`, so `scripts/phone-logs.sh` gives tailscaled
+  logs (control: RegisterReq, authURL, state transitions). Very handy.

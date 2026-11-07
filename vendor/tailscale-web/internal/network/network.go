@@ -33,11 +33,15 @@ import (
 	// webrtcMgr stays nil and it silently drops incoming WebRTC offers,
 	// falling back to DERP. (tailscale-web builds the IPN stack directly and
 	// does not import feature/condregister, so we opt in explicitly here.)
-	_ "tailscale.com/feature/webrtc"
+	// _ "tailscale.com/feature/webrtc" // [phone-agent patch] only exists in the author's private tailscale fork; DERP-only like upstream tsconnect
 )
 
 // Config holds configuration for the Tailscale node.
 type Config struct {
+	// AuthKey is a pre-authorized Tailscale auth key. When set, the node logs in
+	// with it instead of starting the interactive (browser) login flow. [phone-agent patch]
+	AuthKey string
+
 	// Hostname is the name this device will appear as on the tailnet.
 	Hostname string
 
@@ -197,7 +201,13 @@ func Connect(ctx context.Context, cfg Config, onAuthRequired OnAuthRequired, onA
 
 	if cfg.AuthKey != "" {
 		// [phone-agent patch] auth-key login: the backend registers with the key on Start.
+		// Same as tsnet: Start() created the control client with the auth key, so this "interactive"
+		// login registers with the key and never produces an auth URL.
 		log.Println("tailscale-web: no persisted auth, logging in with auth key...")
+		if err := backend.StartLoginInteractive(ctx); err != nil {
+			backend.Shutdown()
+			return nil, fmt.Errorf("auth key login: %w", err)
+		}
 		if err := waitForAuth(ctx, backend, onAuthComplete); err != nil {
 			backend.Shutdown()
 			return nil, err

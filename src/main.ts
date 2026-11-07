@@ -35,5 +35,35 @@ async function main() {
   ts.onerror = (e) => line(`ts worker error: ${e.message}`);
   (window as any).__pa.tsWorker = ts;
   ts.postMessage({ type: "init", authKey: cfg.tsAuthKey, hostname: cfg.tsHostname, port: 8080 });
+
+  // --- agent worker ---
+  const ag = new Worker(new URL("./agent-worker.ts", import.meta.url), { type: "module", name: "agent" });
+  const pa = (window as any).__pa;
+  pa.agent = { ready: false, state: null as unknown, events: [] as unknown[] };
+  ag.onmessage = (ev) => {
+    const m = ev.data;
+    if (m.type === "log") line(m.text);
+    else if (m.type === "ready") pa.agent.ready = true;
+    else if (m.type === "state") pa.agent.state = m.state;
+    else if (m.type === "error") line(`[agent] ERROR ${m.text}`);
+    else if (m.type === "event") {
+      pa.agent.events.push(m.event);
+      const e = m.event;
+      if (e.type === "tool_execution_start") line(`[agent] tool ${e.toolName} ${JSON.stringify(e.args).slice(0, 120)}`);
+      else if (e.type === "tool_execution_end") line(`[agent] tool ${e.toolName} done isError=${e.isError} ${e.durationMs ?? "?"}ms`);
+      else if (e.type === "agent_end") line(`[agent] agent_end (${e.messages.length} new messages)`);
+      else if (e.type === "turn_end" && e.message.role === "assistant") {
+        const t = (e.message.content as any[]).filter((c) => c.type === "text").map((c) => c.text).join("");
+        if (t) line(`[agent] assistant: ${t.slice(0, 400)}`);
+        line(`[agent] usage: ${JSON.stringify((e.message as any).usage)} stop=${(e.message as any).stopReason}`);
+      }
+    }
+  };
+  ag.onerror = (e) => line(`agent worker error: ${e.message}`);
+  pa.agentWorker = ag;
+  pa.prompt = (text: string) => ag.postMessage({ type: "prompt", text });
+  pa.abort = () => ag.postMessage({ type: "abort" });
+  if (cfg.tinfoilApiKey && cfg.tinfoilModel) ag.postMessage({ type: "init", tinfoilApiKey: cfg.tinfoilApiKey, model: cfg.tinfoilModel });
+  else line("agent: no TINFOIL_API_KEY/TINFOIL_MODEL in config, agent idle");
 }
 main().catch((e) => line(`main failed: ${e}`));

@@ -27,16 +27,26 @@ if (!target) { console.error(`no page target matching ${urlFilter}`); process.ex
 const ws = new WebSocket(target.webSocketDebuggerUrl);
 await new Promise((r, e) => { ws.onopen = r; ws.onerror = e; });
 let id = 0; const pending = new Map();
+const sessionNames = new Map(); // sessionId -> label
 ws.onmessage = (m) => {
   const msg = JSON.parse(m.data);
   if (msg.id && pending.has(msg.id)) { pending.get(msg.id)(msg); pending.delete(msg.id); return; }
+  const who = msg.sessionId ? `{${sessionNames.get(msg.sessionId) ?? "worker"}} ` : "";
+  if (msg.method === "Target.attachedToTarget") {
+    const { sessionId, targetInfo } = msg.params;
+    const label = targetInfo.url.split("/").pop()?.split("?")[0] || targetInfo.type;
+    sessionNames.set(sessionId, label);
+    console.error(`attached to ${targetInfo.type} ${label}`);
+    for (const method of ["Runtime.enable", "Log.enable"]) ws.send(JSON.stringify({ id: ++id, sessionId, method, params: {} }));
+    return;
+  }
   if (msg.method === "Runtime.consoleAPICalled") {
     const text = msg.params.args.map((a) => a.value ?? a.description ?? JSON.stringify(a)).join(" ");
-    console.log(`[${msg.params.type}] ${text}`);
+    console.log(`${who}[${msg.params.type}] ${text}`);
   } else if (msg.method === "Runtime.exceptionThrown") {
-    console.log(`[exception] ${msg.params.exceptionDetails.exception?.description ?? msg.params.exceptionDetails.text}`);
+    console.log(`${who}[exception] ${msg.params.exceptionDetails.exception?.description ?? msg.params.exceptionDetails.text}`);
   } else if (msg.method === "Log.entryAdded") {
-    console.log(`[log:${msg.params.entry.level}] ${msg.params.entry.text} ${msg.params.entry.url ?? ""}`);
+    console.log(`${who}[log:${msg.params.entry.level}] ${msg.params.entry.text}`);
   }
 };
 const send = (method, params = {}) => new Promise((r) => { const n = ++id; pending.set(n, r); ws.send(JSON.stringify({ id: n, method, params })); });
@@ -52,5 +62,7 @@ if (cmd === "eval") {
   ws.close();
 } else if (cmd === "logs") {
   await send("Runtime.enable"); await send("Log.enable");
-  console.error(`streaming console of ${target.url} (Ctrl-C to stop)`);
+  // dedicated workers aren't separate /json targets; auto-attach to them (flatten => same ws, sessionId-tagged)
+  await send("Target.setAutoAttach", { autoAttach: true, waitForDebuggerOnStart: false, flatten: true });
+  console.error(`streaming console of ${target.url} + its workers (Ctrl-C to stop)`);
 } else { console.error("unknown cmd"); process.exit(1); }

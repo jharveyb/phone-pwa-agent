@@ -21,8 +21,8 @@ importers:
         specifier: ^3.6.0
         version: 3.6.0
       tailscale-web:
-        specifier: ^0.1.18
-        version: 0.1.18
+        specifier: link:vendor/tailscale-web
+        version: link:vendor/tailscale-web
     devDependencies:
       typescript:
         specifier: ^7.0.2
@@ -1108,9 +1108,6 @@ packages:
   strtok3@10.7.0:
     resolution: {integrity: sha512-iAqrCpp7UXD2FZiHWhLXqdJ6CmNeVzRkkHAyyhhKMVtbVm2KtPX3D/bJNonvtcyLTHS4rwqP2pz9fsjK1K4z0Q==}
     engines: {node: '>=18'}
-
-  tailscale-web@0.1.18:
-    resolution: {integrity: sha512-eDNgo85Gfd2OyR3lulEGKboZas9O45CwFjk5cX3+Hs1DToweA/T4AjNK8kN5l+nldMAYV+aPkAbuNF/+dOYBTQ==}
 
   tar-fs@2.1.5:
     resolution: {integrity: sha512-OboTd8mmMhZDNPV+UjQcK9yKAatXu2aJ+r1w4im1Otd4M4fl2hwvdoXUxIYHFTHWK/3y3FarBP70v3vwmGlOxw==}
@@ -2405,8 +2402,6 @@ snapshots:
   strtok3@10.7.0:
     dependencies:
       '@tokenizer/token': 0.3.0
-
-  tailscale-web@0.1.18: {}
 
   tar-fs@2.1.5:
     dependencies:
