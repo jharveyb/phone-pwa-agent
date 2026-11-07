@@ -30,7 +30,7 @@ function text(msg){return (msg.content||[]).filter(c=>c.type==='text').map(c=>c.
 function connect(){const es=new EventSource('/events?since=0');
  es.onopen=()=>{st.textContent='connected'};es.onerror=()=>{st.textContent='reconnecting…'};
  es.addEventListener('hello',e=>{const d=JSON.parse(e.data);(d.state?.agent?.model)&&(document.getElementById('model').textContent=d.state.agent.model)});
- es.addEventListener('message_end',e=>{const m=JSON.parse(e.data).message;if(m.role==='user'&&typeof m.content==='string')add('user',esc(m.content));});
+ es.addEventListener('message_end',e=>{const m=JSON.parse(e.data).message;if(m.role==='user'){const t=typeof m.content==='string'?m.content:text(m);if(t)add('user',esc(t));}});
  es.addEventListener('turn_start',()=>setBusy(true));
  es.addEventListener('tool_execution_start',e=>{const d=JSON.parse(e.data);tools[d.toolCallId]=add('tool','<b>▶ '+esc(d.toolName)+'</b> '+esc(JSON.stringify(d.args)).slice(0,600))});
  es.addEventListener('tool_execution_end',e=>{const d=JSON.parse(e.data);const out=(d.result?.content?.[0]?.text)||'';const el=tools[d.toolCallId]||add('tool','');el.classList.toggle('err',!!d.isError);el.innerHTML+='\\n'+esc(out.slice(0,2500))+(out.length>2500?'\\n…':'')+' <span style="color:#778">('+(d.durationMs??'?')+'ms)</span>';log.scrollTop=log.scrollHeight});
