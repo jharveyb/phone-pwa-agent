@@ -13,5 +13,20 @@
     "typescript": "^7.0.2",
     "vite": "^8.3.6",
     "vitest": "^5.1.0"
+  },
+  "dependencies": {
+    "@earendil-works/pi-agent-core": "^1.5.0",
+    "@earendil-works/pi-ai": "^1.5.0",
+    "@earendil-works/pi-coding-agent": "^1.5.0",
+    "just-bash": "^3.6.0",
+    "tailscale-web": "^0.1.18"
+  },
+  "pnpm": {
+    "ignoredBuiltDependencies": [
+      "@google/genai",
+      "@mongodb-js/zstd",
+      "node-liblzma",
+      "protobufjs"
+    ]
   }
 }

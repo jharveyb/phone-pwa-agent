@@ -4,5 +4,6 @@ set -euo pipefail
 cd "$(dirname "$0")/.." && . scripts/env.sh
 url="${1:-$PAGE_URL}"
 adb shell input keyevent KEYCODE_WAKEUP >/dev/null
+adb shell cmd statusbar collapse >/dev/null 2>&1 || true
 adb shell am start -a android.intent.action.VIEW -d "'$url'" "$CHROME_PKG" >/dev/null
 echo "opened $url"
