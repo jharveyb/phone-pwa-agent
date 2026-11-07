@@ -127,10 +127,21 @@ document.addEventListener("visibilitychange", () => { line(`visibility: ${docume
 
 // ---------- keep-alive extras ----------
 let webLockHeld = false;
-function holdWebLock() {
-  if (!("locks" in navigator)) return;
-  // Held for the page lifetime; Chrome treats a page holding a lock as doing work (and other tabs can detect us).
-  navigator.locks.request("phone-agent-main", { mode: "exclusive" }, () => { webLockHeld = true; return new Promise<void>(() => {}); }).catch((e) => line(`web lock: ${e}`));
+/**
+ * Single-instance guard: the lock is held for the page lifetime. A second copy of the app on the same origin (an old
+ * tab behind the installed PWA, say) would run a second Tailscale node with the SAME node key and a second agent on
+ * the SAME OPFS files, so it must not start. Resolves false if another instance already holds the lock.
+ */
+function holdWebLock(): Promise<boolean> {
+  if (!("locks" in navigator)) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    // Wait up to 5 s: on a reload the previous document's lock is released a moment after the new one starts, so
+    // `ifAvailable` would wrongly refuse. A live second instance holds it forever and we time out.
+    navigator.locks.request("phone-agent-main", { mode: "exclusive", signal: AbortSignal.timeout(5000) }, () => {
+      webLockHeld = true; resolve(true);
+      return new Promise<void>(() => {}); // never released
+    }).catch((e) => { if ((e as DOMException).name === "AbortError" || (e as DOMException).name === "TimeoutError") resolve(false); else { line(`web lock: ${e}`); resolve(true); } });
+  });
 }
 async function setupPersistence() {
   try { const p = await navigator.storage.persist(); line(`storage.persist() => ${p}`); } catch (e) { line(`storage.persist failed: ${e}`); }
@@ -142,7 +153,13 @@ async function setupPersistence() {
 
 // ---------- boot ----------
 async function main() {
-  line(`boot; secureContext=${window.isSecureContext} OPFS=${!!navigator.storage?.getDirectory} wakeLock=${"wakeLock" in navigator}`);
+  line(`boot; secureContext=${window.isSecureContext} OPFS=${!!navigator.storage?.getDirectory} wakeLock=${"wakeLock" in navigator} standalone=${matchMedia("(display-mode: standalone)").matches}`);
+  if (!(await holdWebLock())) {
+    statusEl.textContent = "another phone-agent instance is already running on this origin — close this one";
+    line("another instance holds the lock; not starting workers (close the other tab/window or this one)");
+    document.body.style.background = "#311";
+    return;
+  }
   const params = new URLSearchParams(location.search);
   if (params.get("reset") === "ts") {
     await new Promise<void>((r) => { const q = indexedDB.deleteDatabase("phone-agent"); q.onsuccess = q.onerror = q.onblocked = () => r(); });
@@ -200,7 +217,6 @@ async function main() {
   ctx.agent.onFetch = (m) => ts.postMessage({ type: "fetch", id: m.id, url: m.url, init: m.init, maxBytes: m.maxBytes } satisfies MainToTs);
   spawnTs();
   await acquireWakeLock();
-  holdWebLock();
   setupPersistence();
   setInterval(() => { statusEl.textContent = `up ${Math.round((Date.now() - BOOT) / 1000)}s · ts ${ctx.ts.ip4 || "…"} · agent ${ctx.agent.ready ? (ctx.agent.state?.isStreaming ? "busy" : "idle") : "init"} · ${new Date().toISOString().slice(11, 19)}`; }, 1000);
 }

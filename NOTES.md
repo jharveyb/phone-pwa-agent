@@ -148,3 +148,9 @@ restored), Go-panic-safe (tailscale worker respawn), wake lock + Web Lock held, 
 - Upstream the two tailscale-web patches (authKey option; typed-nil dialer). Go fork drops WebRTC peer paths → DERP only.
 - Worker heap numbers: `cdp.mjs heap --type worker` needs the worker to be listed under /json (it is, intermittently).
 - Relay fallback was never needed; not written.
+- Installed-PWA finding: the installed app shares the origin's storage (same node, transcript restored) and
+  `storage.persist()` flipped to **true**. But the old browser tab stayed alive behind the PWA window → two instances
+  running one node key and one OPFS. `main.ts` now takes a Web Lock as a single-instance guard (5 s timed wait so a
+  reload doesn't refuse itself); a duplicate shows a red "another instance is running" page and starts nothing.
+- Redaction: history rewritten with `git filter-branch` (tailnet name, hostnames, 100.x IPs, exit node, device serial
+  → placeholders); `scripts/api.sh` derives the MagicDNS suffix at runtime.
