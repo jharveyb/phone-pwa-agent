@@ -7,3 +7,5 @@ config.local.json
 *.local
 .pnpm-store/
 .vite/
+vendor/tailscale-web/dist/main.wasm
+vendor/tailscale-web/src/wasm/main.wasm

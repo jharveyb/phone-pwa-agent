@@ -13,7 +13,14 @@ setInterval(() => (status.textContent = `alive ${Math.round((Date.now() - boot) 
 
 (window as any).__pa = { tsReady: false, tsIp4: "", tsListening: false, tsInitMs: 0, tsErrors: [] as string[] };
 
+async function resetTsState() {
+  await new Promise<void>((r) => { const q = indexedDB.deleteDatabase("phone-agent"); q.onsuccess = q.onerror = q.onblocked = () => r(); });
+  line("tailscale state wiped (?reset=ts)");
+}
+
 async function main() {
+  const params = new URLSearchParams(location.search);
+  if (params.get("reset") === "ts") await resetTsState();
   const cfg = await loadConfig();
   line(`config: tsAuthKey=${cfg.tsAuthKey ? "set" : "MISSING"} tinfoilApiKey=${cfg.tinfoilApiKey ? "set" : "MISSING"} hostname=${cfg.tsHostname}`);
   const ts = new Worker(new URL("./ts-worker.ts", import.meta.url), { type: "module", name: "tailscale" });
@@ -26,6 +33,7 @@ async function main() {
     else if (m.type === "tsStatus") line(`status:\n${m.text}`);
   };
   ts.onerror = (e) => line(`ts worker error: ${e.message}`);
+  (window as any).__pa.tsWorker = ts;
   ts.postMessage({ type: "init", authKey: cfg.tsAuthKey, hostname: cfg.tsHostname, port: 8080 });
 }
 main().catch((e) => line(`main failed: ${e}`));

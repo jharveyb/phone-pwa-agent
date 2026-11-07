@@ -22,7 +22,7 @@
             tailscale     # tailscale CLI (talks to the host tailscaled)
             jq
             curl
-            # go  # TODO: only if the relay fallback is needed
+            go_1_27       # builds vendor/tailscale-web main.wasm (GOOS=js GOARCH=wasm)
           ];
           shellHook = ''
             export PATH="$PWD/node_modules/.bin:$PATH"
