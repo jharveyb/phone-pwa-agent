@@ -3,4 +3,4 @@ phone-agent
 Pi  ·  Tailscale  ·  Tinfoil  ·  Pyodide
 one Chrome tab, one phone, zero servers
 
-github: <your-repo-url>
+github: https://github.com/jharveyb/phone-pwa-agent
