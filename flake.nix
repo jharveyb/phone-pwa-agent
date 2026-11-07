@@ -22,6 +22,7 @@
             tailscale     # tailscale CLI (talks to the host tailscaled)
             jq
             curl
+            mermaid-cli   # mmdc: render/validate the README architecture diagram (bundles a headless Chromium)
             go_1_27       # builds vendor/tailscale-web main.wasm (GOOS=js GOARCH=wasm)
           ];
           shellHook = ''

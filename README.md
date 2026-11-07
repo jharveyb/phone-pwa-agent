@@ -20,59 +20,50 @@ Status, measurements and dead ends: [NOTES.md](NOTES.md).
 
 ```mermaid
 flowchart LR
-  subgraph laptop["Laptop (any tailnet machine)"]
-    cli["scripts/ask.sh · state.sh · watchdog.sh<br/>curl / jq"]
-    ui["Browser → GET /ui<br/>(chat page served by the phone)"]
-    dev["Vite dev server + tailscale serve<br/>https://laptop.ts.net (page + /__config.json)"]
+  subgraph laptop["Laptop / any device on the tailnet"]
+    cli["ask.sh · state.sh · watchdog.sh<br/>(curl + SSE)"]
+    ui["Browser → GET /ui<br/>chat page served by the phone"]
   end
 
-  subgraph phone["Pixel 6 · Chrome · installed PWA (one tab)"]
+  subgraph phone["Phone · Chrome · installed PWA (one tab)"]
     direction TB
-    subgraph mainthread["Main thread"]
-      router["Router + status page<br/>wake lock · Web Lock (single instance)<br/>service worker (wasm/Pyodide cache)"]
-    end
+    router["Main thread: router<br/>wake lock · single-instance lock"]
     subgraph tsw["Worker: tailscale-web (Go → WASM)"]
-      tsnode["Tailscale node 'pwa-agent'<br/>auth-key login · netstack · WireGuard"]
-      http["HTTP/1.1 + SSE server on :8080<br/>/prompt /events /state /ui …"]
+      tsnode["Tailscale node<br/>auth-key login · WireGuard · netstack"]
+      http["HTTP/1.1 + SSE server on :8080"]
       wf["net.fetch (web_fetch egress)"]
     end
     subgraph agw["Worker: agent"]
       pi["pi Agent loop<br/>(@earendil-works/pi-agent-core)"]
       tools["Tools: read · write · edit · bash · ls<br/>web_fetch · python"]
-      benv["BrowserExecutionEnv<br/>just-bash interpreter + InMemoryFs"]
-      pers["Persistence<br/>fs snapshot + session.jsonl"]
+      benv["BrowserExecutionEnv<br/>just-bash + InMemoryFs"]
     end
-    subgraph pyw["Worker: python (nested)"]
-      py["Pyodide · CPython/WASM sandbox<br/>home dir mirrored in/out"]
-    end
+    py["Worker: python<br/>Pyodide (CPython/WASM) sandbox"]
     subgraph storage["Origin storage"]
-      opfs[("OPFS<br/>fs-snapshot.json · session.jsonl")]
+      opfs[("OPFS<br/>fs snapshot · session.jsonl")]
       idb[("IndexedDB<br/>Tailscale node state")]
     end
   end
 
   subgraph net["Tailnet / internet"]
-    ctrl["Tailscale control + DERP relays"]
-    exitnode["Exit node (TS_EXIT_NODE)"]
+    ctrl["Tailscale control + DERP"]
+    exitnode["Tailnet exit node"]
     inet["Public internet"]
-    tinfoil["Tinfoil inference enclave<br/>deepseek-v4-1-flash<br/>(attested, encrypted bodies)"]
-    cdn["jsDelivr CDN<br/>Pyodide runtime"]
+    tinfoil["Tinfoil inference enclave<br/>(attested, encrypted bodies)"]
   end
 
   cli -- "HTTP over the tailnet" --> http
   ui -- "HTTP + SSE" --> http
-  dev -. "page load / HMR" .-> router
   http <-- "postMessage" --> router
   router <-- "postMessage" --> pi
   pi --> tools --> benv
-  tools -- "fetch request" --> router -- "fetch" --> wf
-  tools -- "run code" --> py
-  benv <-- "snapshot / restore" --> pers --> opfs
+  tools -- "web_fetch" --> router --> wf
+  tools -- "run code, files in/out" --> py
+  benv -- "snapshot after each tool call" --> opfs
   tsnode --> idb
-  tsnode <-- "WebSocket to DERP" --> ctrl
-  wf -- "via exit node" --> exitnode --> inet
-  pi -- "HTTPS: pi-ai openai-completions + Tinfoil SecureClient fetch" --> tinfoil
-  py -. "first load, then SW-cached" .-> cdn
+  tsnode <-- "WebSocket" --> ctrl
+  wf --> exitnode --> inet
+  pi -- "HTTPS via Tinfoil SecureClient fetch" --> tinfoil
 ```
 
 ## Layout
