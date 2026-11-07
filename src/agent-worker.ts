@@ -6,6 +6,7 @@ import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completio
 import { BrowserExecutionEnv, type FsSnapshot } from "./env/browser-env";
 import { opfsAppendText, opfsReadText, opfsRemove, opfsStat, opfsWriteText } from "./opfs";
 import { createBrowserTools } from "./tools";
+import { createWebFetchTool, resolveFetch } from "./tools/web-fetch";
 
 const FS_SNAPSHOT = "fs-snapshot.json";
 const SESSION_LOG = "session.jsonl";
@@ -17,13 +18,15 @@ export type AgentWorkerIn =
   | { type: "steer"; text: string }
   | { type: "abort" }
   | { type: "state" }
-  | { type: "clear-session" };
+  | { type: "clear-session" }
+  | { type: "fetch-result"; id: number; ok: boolean; status?: number; headers?: Record<string, string>; body?: string; error?: string; viaExitNode?: string };
 export type AgentWorkerOut =
   | { type: "log"; text: string }
   | { type: "ready"; model: string }
   | { type: "event"; event: AgentEvent; t: number }
   | { type: "state"; state: AgentPublicState }
-  | { type: "error"; text: string };
+  | { type: "error"; text: string }
+  | { type: "fetch"; id: number; url: string; init?: { method?: string; headers?: Record<string, string>; body?: string }; maxBytes?: number };
 export interface AgentPublicState {
   model: string;
   isStreaming: boolean;
@@ -132,7 +135,7 @@ async function init(m: Extract<AgentWorkerIn, { type: "init" }>) {
   const restored = await loadSession().catch((e) => { log(`session restore FAILED: ${e}`); return [] as AgentMessage[]; });
   persistence.restoredMessages = restored.length;
   if (restored.length) log(`restored ${restored.length} transcript messages`);
-  const tools = createBrowserTools(env);
+  const tools = [...createBrowserTools(env), createWebFetchTool((req) => post({ type: "fetch", ...req }))];
   agent = new Agent({
     streamFn: (mdl, ctx, opts) => models.streamSimple(mdl, ctx, opts),
     initialState: { systemPrompt: SYSTEM_PROMPT, tools, model, thinkingLevel: "off", messages: restored },
@@ -165,6 +168,7 @@ self.onmessage = async (ev: MessageEvent<AgentWorkerIn>) => {
   const m = ev.data;
   try {
     if (m.type === "init") await init(m);
+    else if (m.type === "fetch-result") resolveFetch(m);
     else if (!agent) post({ type: "error", text: "agent not initialized" });
     else if (m.type === "prompt") {
       if (agent.state.isStreaming) { agent.followUp({ role: "user", content: m.text, timestamp: Date.now() }); log("queued as follow-up"); }

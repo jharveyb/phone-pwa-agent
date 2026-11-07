@@ -22,6 +22,7 @@ function configEndpoint(): Plugin {
             tsHostname: env.TS_HOSTNAME ?? "pixel-agent",
             tinfoilApiKey: env.TINFOIL_API_KEY ?? null,
             tinfoilModel: env.TINFOIL_MODEL ?? null,
+            tsExitNode: env.TS_EXIT_NODE ?? null, // hostname of a tailnet exit node for web_fetch (optional)
           }),
         );
       });

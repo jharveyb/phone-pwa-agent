@@ -11,10 +11,43 @@ const log = (s: string) => post({ type: "log", text: `[ts] ${s}` });
 
 const conns = new Map<number, { conn: Connection; sse: boolean }>();
 let nextId = 0;
+let net: typeof import("tailscale-web").network | undefined;
+let exitNodeWanted: string | null = null;
+let exitNodeActive: string | null = null;
+
+async function ensureExitNode(): Promise<string | null> {
+  if (!net || !exitNodeWanted) return null;
+  if (exitNodeActive === exitNodeWanted) return exitNodeActive;
+  const nodes = net.listExitNodes();
+  const n = nodes.find((x) => x.hostName === exitNodeWanted || x.dnsName.startsWith(exitNodeWanted + ".") || x.tailscaleIP === exitNodeWanted);
+  if (!n) { log(`exit node "${exitNodeWanted}" not found; available: ${nodes.map((x) => x.hostName + (x.online ? "" : "(offline)")).join(", ") || "none"}`); return null; }
+  await net.setExitNode(n.id);
+  exitNodeActive = exitNodeWanted;
+  log(`exit node set: ${n.hostName} (${n.tailscaleIP}) online=${n.online}`);
+  return exitNodeActive;
+}
+
+async function doFetch(m: Extract<MainToTs, { type: "fetch" }>) {
+  try {
+    if (!net) throw new Error("tailscale not initialized");
+    const via = await ensureExitNode();
+    const t0 = performance.now();
+    const r = await net.fetch(m.url, { method: m.init?.method ?? "GET", headers: { "user-agent": "phone-agent/0.1 (+tailscale-web)", ...(m.init?.headers ?? {}) }, ...(m.init?.body !== undefined ? { body: m.init.body } : {}) });
+    const bytes = await r.bytes();
+    const max = m.maxBytes ?? 512 * 1024;
+    const body = new TextDecoder().decode(bytes.subarray(0, max)) + (bytes.length > max ? `\n[truncated ${bytes.length - max} bytes]` : "");
+    log(`fetch ${m.url} -> ${r.status} ${bytes.length}B ${(performance.now() - t0).toFixed(0)}ms${via ? " via " + via : ""}`);
+    post({ type: "fetch-result", id: m.id, ok: true, status: r.status, headers: r.headers, body, viaExitNode: via ?? undefined });
+  } catch (e) {
+    log(`fetch ${m.url} FAILED: ${e}`);
+    post({ type: "fetch-result", id: m.id, ok: false, error: String(e) });
+  }
+}
 
 self.onmessage = async (ev: MessageEvent<MainToTs>) => {
   const m = ev.data;
   if (m.type === "init") return init(m).catch((e) => { log(`ERROR ${(e as Error).stack ?? e}`); post({ type: "error", text: String(e) }); });
+  if (m.type === "fetch") return doFetch(m);
   const c = conns.get(m.id);
   if (!c) return;
   try {
@@ -34,6 +67,7 @@ function closeSoon(id: number) {
 async function init(m: Extract<MainToTs, { type: "init" }>) {
   const t0 = performance.now();
   const { network } = await import("tailscale-web");
+  net = network; exitNodeWanted = m.exitNode ?? null;
   log(`module loaded in ${(performance.now() - t0).toFixed(0)}ms`);
   const storage = await openTsStorage();
   log(`persisted state keys: ${storage.keys().length}`);

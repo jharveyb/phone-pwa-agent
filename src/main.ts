@@ -25,6 +25,7 @@ class AgentHost {
   seq = 0;
   restarts = 0;
   private subs = new Set<(e: EventRec) => void>();
+  onFetch?: (m: Extract<AgentWorkerOut, { type: "fetch" }>) => void;
   constructor(private cfg: AppConfig) { this.spawn(); }
   private spawn() {
     this.ready = false;
@@ -36,6 +37,7 @@ class AgentHost {
       else if (m.type === "state") this.state = m.state;
       else if (m.type === "error") { line(`[agent] ERROR ${m.text}`); this.emit({ type: "error", text: m.text }); }
       else if (m.type === "event") this.emit(m.event);
+      else if (m.type === "fetch") this.onFetch?.(m);
     };
     this.worker.onerror = (e) => line(`agent worker error: ${e.message}`);
     if (this.cfg.tinfoilApiKey && this.cfg.tinfoilModel) this.send({ type: "init", tinfoilApiKey: this.cfg.tinfoilApiKey, model: this.cfg.tinfoilModel });
@@ -59,7 +61,7 @@ class AgentHost {
 }
 
 // ---------- router ----------
-interface Ctx { cfg: AppConfig; agent: AgentHost; ts: { ip4: string; ip6: string; initMs: number; listening: boolean; errors: string[]; authUrl?: string } }
+interface Ctx { cfg: AppConfig; agent: AgentHost; ts: { ip4: string; ip6: string; initMs: number; listening: boolean; errors: string[]; authUrl?: string; restarts: number; debugFetch?: (url: string) => Promise<unknown> } }
 type Reply = { status: number; body: string; headers?: Record<string, string> } | { sse: (write: (event: string, data: unknown) => void, onClose: (fn: () => void) => void) => void };
 
 function fullState(ctx: Ctx) {
@@ -78,7 +80,7 @@ function fullState(ctx: Ctx) {
 
 async function route(req: HttpRequest, ctx: Ctx): Promise<Reply> {
   const jsonBody = () => { try { return req.body ? JSON.parse(req.body) : {}; } catch { throw new Error("body is not JSON"); } };
-  if (req.method === "GET" && req.path === "/") return { status: 200, body: `phone-agent ${ctx.ts.ip4} up ${Math.round((Date.now() - BOOT) / 1000)}s agent=${ctx.agent.ready ? "ready" : "init"} streaming=${ctx.agent.state?.isStreaming ?? "?"}\nendpoints: GET /state, POST /prompt {text}, POST /steer {text}, POST /abort, POST /restart, POST /session/clear, GET /events[?since=N], GET /log\n` };
+  if (req.method === "GET" && req.path === "/") return { status: 200, body: `phone-agent ${ctx.ts.ip4} up ${Math.round((Date.now() - BOOT) / 1000)}s agent=${ctx.agent.ready ? "ready" : "init"} streaming=${ctx.agent.state?.isStreaming ?? "?"}\nendpoints: GET /state, POST /prompt {text}, POST /steer {text}, POST /abort, POST /restart, POST /session/clear, POST /fetch {url} (debug), GET /events[?since=N], GET /log\n` };
   if (req.method === "GET" && req.path === "/state") return { status: 200, body: JSON.stringify(fullState(ctx), null, 1) + "\n", headers: { "content-type": "application/json" } };
   if (req.method === "GET" && req.path === "/log") return { status: 200, body: logLines.join("\n") + "\n" };
   if (req.method === "POST" && (req.path === "/prompt" || req.path === "/steer")) {
@@ -93,6 +95,11 @@ async function route(req: HttpRequest, ctx: Ctx): Promise<Reply> {
   }
   if (req.method === "POST" && req.path === "/abort") { ctx.agent.send({ type: "abort" }); return { status: 202, body: "abort requested\n" }; }
   if (req.method === "POST" && req.path === "/session/clear") { ctx.agent.send({ type: "clear-session" }); return { status: 202, body: "session cleared\n" }; }
+  if (req.method === "POST" && req.path === "/fetch") { // debug: fetch through the tailscale node without the LLM
+    const url = jsonBody().url; if (typeof url !== "string") return { status: 400, body: "expected {url}\n" };
+    const r = await ctx.ts.debugFetch!(url);
+    return { status: 200, body: JSON.stringify(r, null, 1) + "\n", headers: { "content-type": "application/json" } };
+  }
   if (req.method === "POST" && req.path === "/restart") { ctx.agent.restart(); return { status: 202, body: "agent worker restarted\n" }; }
   if (req.method === "GET" && req.path === "/events") {
     const since = parseInt(req.query.since ?? "", 10);
@@ -143,12 +150,33 @@ async function main() {
   }
   const cfg = await loadConfig();
   line(`config: tsAuthKey=${cfg.tsAuthKey ? "set" : "MISSING"} tinfoilApiKey=${cfg.tinfoilApiKey ? "set" : "MISSING"} model=${cfg.tinfoilModel} hostname=${cfg.tsHostname}`);
-  const ctx: Ctx = { cfg, agent: new AgentHost(cfg), ts: { ip4: "", ip6: "", initMs: 0, listening: false, errors: [] } };
+  const ctx: Ctx = { cfg, agent: new AgentHost(cfg), ts: { ip4: "", ip6: "", initMs: 0, listening: false, errors: [], restarts: 0 } };
   (window as any).__pa = { ctx, prompt: (text: string) => ctx.agent.send({ type: "prompt", text }), abort: () => ctx.agent.send({ type: "abort" }), log: logLines, state: () => fullState(ctx) };
 
-  const ts = new Worker(new URL("./ts-worker.ts", import.meta.url), { type: "module", name: "tailscale" });
   const sseClose = new Map<number, () => void>();
-  ts.onmessage = async (ev: MessageEvent<TsToMain>) => {
+  const debugFetches = new Map<number, (r: unknown) => void>();
+  let debugFetchId = 0;
+  ctx.ts.debugFetch = (url) => new Promise((resolve) => { const id = --debugFetchId; debugFetches.set(id, (r) => { debugFetches.delete(id); resolve(r); }); setTimeout(() => { if (debugFetches.delete(id)) resolve({ ok: false, error: "timeout 60s" }); }, 60_000); ts.postMessage({ type: "fetch", id, url, maxBytes: 4096 } satisfies MainToTs); });
+  let ts!: Worker;
+  let tsRestarts = 0;
+  let tsRestartTimer: number | undefined;
+  const spawnTs = () => {
+    ctx.ts.listening = false; ctx.ts.ip4 = "";
+    ts = new Worker(new URL("./ts-worker.ts", import.meta.url), { type: "module", name: "tailscale" });
+    ts.onmessage = onTsMessage;
+    ts.onerror = (e) => {
+      line(`ts worker error: ${e.message}`);
+      // A Go panic ends the wasm program ("Go program has already exited"): the node, listener and API are gone.
+      if (/Go program has already exited|RuntimeError/.test(e.message) && tsRestartTimer === undefined) {
+        const delay = Math.min(30_000, 2_000 * 2 ** Math.min(tsRestarts, 4));
+        line(`[ts] crashed; restarting worker in ${delay / 1000}s (restart #${tsRestarts + 1})`);
+        ctx.ts.errors.push(`${new Date().toISOString()} crash: ${e.message}`);
+        tsRestartTimer = window.setTimeout(() => { tsRestartTimer = undefined; tsRestarts++; ctx.ts.restarts = tsRestarts; ts.terminate(); for (const fn of sseClose.values()) fn(); sseClose.clear(); spawnTs(); }, delay);
+      }
+    };
+    ts.postMessage({ type: "init", authKey: cfg.tsAuthKey, hostname: cfg.tsHostname, port: 8080, exitNode: cfg.tsExitNode } satisfies MainToTs);
+  };
+  const onTsMessage = async (ev: MessageEvent<TsToMain>) => {
     const m = ev.data;
     if (m.type === "log") line(m.text);
     else if (m.type === "ready") Object.assign(ctx.ts, { ip4: m.ip4, ip6: m.ip6, initMs: Math.round(m.initMs) });
@@ -157,6 +185,7 @@ async function main() {
     else if (m.type === "error") ctx.ts.errors.push(m.text);
     else if (m.type === "tsStatus") { /* noisy; available via console */ console.log(m.text); }
     else if (m.type === "closed") { sseClose.get(m.id)?.(); sseClose.delete(m.id); }
+    else if (m.type === "fetch-result") { if (m.id < 0) debugFetches.get(m.id)?.(m); else ctx.agent.send({ ...m }); }
     else if (m.type === "http") {
       const send = (x: MainToTs) => ts.postMessage(x);
       try {
@@ -168,8 +197,8 @@ async function main() {
       } catch (e) { send({ type: "response", id: m.id, status: 500, body: `error: ${(e as Error).message}\n` }); }
     }
   };
-  ts.onerror = (e) => line(`ts worker error: ${e.message}`);
-  ts.postMessage({ type: "init", authKey: cfg.tsAuthKey, hostname: cfg.tsHostname, port: 8080 } satisfies MainToTs);
+  ctx.agent.onFetch = (m) => ts.postMessage({ type: "fetch", id: m.id, url: m.url, init: m.init, maxBytes: m.maxBytes } satisfies MainToTs);
+  spawnTs();
   await acquireWakeLock();
   holdWebLock();
   setupPersistence();

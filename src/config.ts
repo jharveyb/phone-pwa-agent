@@ -3,6 +3,7 @@ export interface AppConfig {
   tsHostname: string;
   tinfoilApiKey: string | null;
   tinfoilModel: string | null;
+  tsExitNode: string | null;
 }
 export async function loadConfig(): Promise<AppConfig> {
   const r = await fetch("/__config.json", { cache: "no-store" });
